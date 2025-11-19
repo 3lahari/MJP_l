@@ -1,1 +1,2 @@
 i-0e87869045bffa5d9
+ssh -i "MyKeyPair.pem" ubuntu@ec2-34-228-80-59.compute-1.amazonaws.com
