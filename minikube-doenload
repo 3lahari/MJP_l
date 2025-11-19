@@ -1,0 +1,100 @@
+step 2: Download Minikube
+1.Open a PowerShell or Command Prompt with administrator privileges.
+2.Download the latest Minikube executable using this command:
+3.curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-installer.exe
+4.Install Minikube by running the installer:
+.\minikube-installer.exe
+
+Step 3: Add Minikube to PATH
+If Minikube is not automatically added to your PATH during installation:
+1.Open System Properties → Environment Variables.
+2.Add the directory where Minikube is installed (e.g., C:\Program Files\Minikube) to your PATH variable.
+
+Step 4: Start Minikube
+1.Open a terminal (PowerShell or CMD). Do the following commands
+2.Start Minikube with a specified driver (e.g., Hyper-V, Docker, or VirtualBox). For example:
+oHyper-V: 
+ominikube start --driver=hyperv
+oDocker: 
+ominikube start --driver=docker
+3.Verify Minikube is running:
+4.minikube status
+
+Step 5: Interact with Minikube
+
+kubectl is a command-line tool used in Kubernetes to interact with and manage Kubernetes clusters.
+Once Minikube is running:
+1.Use kubectl to interact with the cluster.
+oInstall kubectl if not already installed: 
+ominikube kubectl -- get pods -A
+oOr download it separately from the official Kubernetes site.
+2.Open the Minikube dashboard (optional):
+3.minikube dashboard
+
+Optional: Check Your Installation
+Run the following to verify the installation:
+Minikube version
+	kubectl version --client
+
+Troubleshooting
+1.If Minikube fails to start:
+oEnsure your hypervisor (Hyper-V/Docker/VirtualBox) is installed and running.
+oCheck the Minikube logs: 
+ominikube logs
+2.Updating Minikube:
+3.minikube update-check
+minikube update
+
+********************************************************************
+Minikube Automation Steps
+Step 1: Start Minikube Cluster
+Open your terminal and run the command:
+minikube start
+Step 2: Create and Manage Deployment
+1.Create  an application in Kubernetes:
+
+oCommand:
+kubectl create deployment mynginx --image=nginx
+
+if already created then 
+
+kubectl set image deployment/myngnix nginx=nginx:latest
+
+oVerify the deployment using: Kubernetes responds by showing you a list that includes the names of your deployment groups
+kubectl get deployments
+Ensure mynginx appears in the output.
+Check the following commands:
+kubectl get pods
+kubectl describe pods
+2.Expose Deployment as a Service:
+oCommand:
+kubectl expose deployment mynginx --type=NodePort --port=80 --target-port=80
+Step 3: Scale the Deployment
+Command:Scales the Nginx deployment to 4 replicas (pods).
+kubectl scale deployment mynginx --replicas=4
+kubectl get service myngnix
+Step 4: Access the Nginx App
+1.Using Port Forwarding:
+oCommand:
+kubectl port-forward svc/mynginx 8081:80
+
+Access the app via http://localhost:8081.
+If Error, use this option, Using Minikube Tunnel:
+oStart the tunnel:
+minikube tunnel
+oRetrieve the service URL:
+minikube service mynginx --url
+oOpen the provided URL in your browser.
+oOpen the kubernets dashboard
+Open the minikube dashboard	
+Minikube dashboard
+Step 5: Stop and Clean Up
+1.Stop Nginx Deployment:
+oCommands:
+kubectl delete deployment mynginx
+kubectl delete service mynginx
+2.Stop Minikube (Optional):
+oCommand:
+minikube stop
+3.Delete Minikube Cluster (Optional):
+Command:minikube delete
