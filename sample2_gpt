@@ -1,0 +1,571 @@
+Nice — I’ll give you precise, *click-by-click + command-by-command* steps for each question so you (or a grader) can reproduce everything. I’ll include sample files (Jenkinsfile, Dockerfile), exact commands to run locally and on EC2, and where to click in the GUIs (GitHub, Jenkins, StarUML, AWS). If you follow these steps you’ll produce the required artifacts and screenshots.
+
+---
+
+# Q1 — Jenkins Pipeline for a Web Project (25 marks)
+
+Goal: clone GitHub repo → configure Tomcat → deploy app → create Jenkins pipeline view → show web app running locally.
+
+## Preconditions
+
+* You have a GitHub repo containing a Java webapp (WAR) or any web project (Node/Java/Spring). Adjust file names as needed.
+* Jenkins is installed (local VM or server) and reachable at http://<jenkins-host>:8080.
+* Tomcat installed locally (or on same server) and running on port 8080 (or 8081 to avoid conflicts with Jenkins).
+
+---
+
+## Step A — Prepare the GitHub repo
+
+1. Open GitHub in your browser → sign in.
+2. Open your repository page (or create new: *New* → repository). Push your web project here.
+
+   * If it’s a Java webapp, make sure build creates a .war (Maven pom.xml with mvn package) or a war in target/*.war.
+   * Add a Jenkinsfile (see example below) at repo root.
+
+### Example Jenkinsfile (Declarative pipeline for a Java Maven webapp)
+
+groovy
+pipeline {
+  agent any
+
+  environment {
+    APP_NAME = "my-webapp"
+    WAR_PATH = "target/${APP_NAME}.war" // adjust if different
+    TOMCAT_USER = credentials('tomcat-user') // Jenkins credential id
+    TOMCAT_URL = "http://tomcat-host:8080/manager/text" // adjust host
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git url: 'https://github.com/yourusername/yourrepo.git', branch: 'main'
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh 'mvn -B clean package'
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'target/*.war', fingerprint: true
+        }
+      }
+    }
+
+    stage('Deploy to Tomcat') {
+      steps {
+        script {
+          // Deploy using Tomcat manager; requires username/password credentials
+          def warFile = fileExists(env.WAR_PATH) ? env.WAR_PATH : ''
+          if (warFile == '') {
+            error("WAR not found at ${env.WAR_PATH}")
+          }
+          sh """
+            curl -u ${TOMCAT_USER_USR}:${TOMCAT_USER_PSW} --upload-file ${env.WAR_PATH} "${TOMCAT_URL}/deploy?path=/myapp&update=true"
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Pipeline completed successfully"
+    }
+    failure {
+      echo "Pipeline failed"
+    }
+  }
+}
+
+
+Notes:
+
+* Replace tomcat-host, credentials and repo URL.
+* In Jenkins use *Credentials* to store Tomcat user (username/password) and set id tomcat-user or adjust.
+
+---
+
+## Step B — Configure Tomcat (local or remote)
+
+*If Tomcat not installed:*
+
+1. Download Tomcat (e.g., Tomcat 9 or 10) from the Apache site and extract.
+2. Start Tomcat: in bin folder run ./catalina.sh run (Linux/mac) or catalina.bat run (Windows).
+
+*Enable Tomcat Manager (for uploads via curl or Jenkins):*
+
+1. Open Tomcat conf/tomcat-users.xml.
+2. Add a manager user:
+
+xml
+<role rolename="manager-gui"/>
+<role rolename="manager-script"/>
+<user username="admin" password="password123" roles="manager-gui,manager-script"/>
+
+
+3. Save and restart Tomcat: bin/catalina.sh stop then bin/catalina.sh start.
+
+*Test Tomcat*
+
+* Open browser: http://<tomcat-host>:8080/ → Tomcat homepage / Manager app
+* Manager app: http://<tomcat-host>:8080/manager/html (login with admin/password).
+
+---
+
+## Step C — Jenkins setup (plugins, credentials, pipeline job)
+
+1. Open Jenkins: http://<jenkins-host>:8080.
+
+2. *Manage Jenkins → Manage Plugins → Available*:
+
+   * Search & install: Pipeline, Git, GitHub Integration, Credentials, Pipeline: GitHub Groovy, Build Pipeline Plugin or Delivery Pipeline Plugin (for pipeline view)
+   * Restart Jenkins if prompted.
+
+3. *Manage Jenkins → Configure System*:
+
+   * Under *Git* add global paths if needed.
+   * Under *GitHub Servers* add a GitHub server if you plan to do webhooks (optional).
+
+4. *Manage Jenkins → Credentials → System → Global credentials (add)*:
+
+   * Add username/password credential for Tomcat user; give ID tomcat-user.
+   * (Optional) Add GitHub token credential if using GitHub API.
+
+5. *Create Pipeline Job*:
+
+   * Jenkins Dashboard → *New Item* → name: webapp-pipeline → select *Pipeline* → OK.
+   * In pipeline configuration, choose *Pipeline script from SCM* → SCM: *Git*.
+   * Repository URL: https://github.com/yourusername/yourrepo.git and credentials if private.
+   * Branch: main.
+   * Script Path: Jenkinsfile (default).
+   * Save.
+
+6. *Run the job manually once: Click **Build Now* → watch console (open the build number → Console Output).
+
+   * Expected: it checks out, runs mvn package, archives the war, and deploys via curl to Tomcat.
+
+---
+
+## Step D — If Jenkins and Tomcat run on same host you can deploy to Tomcat by copying WAR
+
+Alternative deploy stage using scp/cp (if Jenkins agent has access):
+
+sh
+# Example sh for deploy
+scp target/my-webapp.war tomcatuser@tomcat-host:/opt/tomcat/webapps/myapp.war
+# or if same host:
+cp target/my-webapp.war /opt/tomcat/webapps/myapp.war
+
+
+Then Tomcat auto-deploys it (if autoDeploy=true).
+
+---
+
+## Step E — Pipeline View (Jenkins)
+
+1. Install Build Pipeline Plugin or Delivery Pipeline Plugin (see Step B plugins).
+2. Jenkins Dashboard → *+* (or *New View*) → Enter View name: WebApp Pipeline View.
+3. Select *Build Pipeline View* (or *Delivery Pipeline View*) → OK.
+4. Configure:
+
+   * Select the *upstream job* (your webapp-pipeline) as the starting job.
+   * Save.
+5. Open view to see pipeline stages and recent runs. Take screenshot.
+
+---
+
+## Step F — Proof that web app runs locally
+
+1. Once deployed, open: http://<tomcat-host>:8080/myapp/ or http://<tomcat-host>:8080/myapp/index.html.
+2. Command-line proof:
+
+sh
+# curl HTTP status and a snippet
+curl -I http://tomcat-host:8080/myapp/
+curl http://tomcat-host:8080/myapp/ | head -n 20
+
+
+3. Screenshot Jenkins Console Output for build + screenshot of browser showing web page.
+
+---
+
+# Q2 — UML Design using StarUML (25 marks)
+
+Goal: build a Class Diagram for Library Management System with Books, Members, Librarian, borrowing records, issue/return dates, fines.
+
+## Step-by-step: open StarUML & draw diagram
+
+1. *Open StarUML* (Windows/Mac/Linux).
+2. *File → New Project* → Choose UML project template.
+3. On left palette, choose *Model Explorer* → Right-click *Model* → *Add Diagram → Class Diagram*.
+4. From the *Toolbox* (usually right side or top), drag-and-drop:
+
+### Classes to add (with attributes & methods)
+
+* *Book*
+
+  * Attributes:
+
+    * bookId: String
+    * title: String
+    * author: String
+    * isbn: String
+    * publisher: String
+    * copiesAvailable: int
+  * Methods:
+
+    * isAvailable(): boolean
+    * updateCopies(delta: int): void
+
+* *Member*
+
+  * Attributes:
+
+    * memberId: String
+    * name: String
+    * email: String
+    * phone: String
+    * borrowedBooks: List<IssueRecord> (or association)
+  * Methods:
+
+    * borrowBook(book: Book): IssueRecord
+    * returnBook(recordId: String): boolean
+    * calculateFine(record: IssueRecord): float
+
+* *Librarian*
+
+  * Attributes:
+
+    * librarianId: String
+    * name: String
+    * employeeNo: String
+  * Methods:
+
+    * issueBook(member: Member, book: Book): IssueRecord
+    * receiveReturn(record: IssueRecord): boolean
+    * addBook(book: Book): void
+
+* *IssueRecord* (or Loan)
+
+  * Attributes:
+
+    * recordId: String
+    * book: Book (or bookId)
+    * member: Member (or memberId)
+    * issueDate: Date
+    * dueDate: Date
+    * returnDate: Date
+    * fine: float
+  * Methods:
+
+    * isOverdue(): boolean
+    * computeFine(currentDate: Date): float
+
+### Relationships & multiplicity
+
+* Member 1 --- * IssueRecord (one member can have many issue records)
+* Book 1 --- * IssueRecord (one book may have many issue records historically)
+* Librarian 1 --- * IssueRecord (optional: librarian issues many records)
+* Book aggregation to LibraryCatalog (optional)
+* Show multiplicities: Member (1) to IssueRecord (0..), Book (1) to IssueRecord (0..), Book has copiesAvailable attribute.
+
+5. *Add notes or constraints*: e.g., fine calculation = (daysLate * perDayFine).
+
+6. *Style*: Use the property panel to add visibility + for public attributes/methods if needed, and align.
+
+7. *Save / Export*: File → Export Diagram → PNG or PDF (for submission).
+
+---
+
+# Q3 — Webhooks to Trigger Builds in Jenkins (25 marks)
+
+Goal: When you push to GitHub repo, GitHub webhook should notify Jenkins and trigger build automatically.
+
+## Preconditions
+
+* Jenkins server is reachable by GitHub by a public URL OR you use tunneling (ngrok) for local Jenkins.
+* Jenkins has GitHub or GitHub Integration plugin installed.
+
+---
+
+## Step A — Ensure Jenkins endpoint for GitHub webhook
+
+1. Jenkins has a webhook endpoint at: http://<jenkins-host>:8080/github-webhook/ (if GitHub plugin installed).
+2. If Jenkins is local (127.0.0.1) and not publicly accessible:
+
+   * Download & run ngrok ([https://ngrok.com](https://ngrok.com)) to tunnel: ngrok http 8080.
+   * Ngrok will provide an HTTPS public URL like https://abc123.ngrok.io which forwards to your Jenkins.
+   * Use https://abc123.ngrok.io/github-webhook/ as webhook URL in GitHub.
+
+---
+
+## Step B — Configure GitHub webhook
+
+1. Open your repository on GitHub → *Settings* → *Webhooks* → *Add webhook*.
+2. *Payload URL*: http://<jenkins-host-or-ngrok>/github-webhook/ (must be reachable via HTTPS when using GitHub).
+3. *Content type*: application/json.
+4. *Secret*: optional — if used, set same secret in Jenkins.
+5. *Which events*: Choose Just the push event (or Let me select individual events → Push).
+6. *Add webhook*.
+
+Take a screenshot of the webhook listing (this shows successful delivery attempts later).
+
+---
+
+## Step C — Configure Jenkins job to be triggered by GitHub
+
+1. Open Jenkins → *webapp-pipeline* job → *Configure*.
+2. Under *Build Triggers*:
+
+   * Check *GitHub hook trigger for GITScm polling* (or *GitHub hook trigger*).
+3. Save.
+
+---
+
+## Step D — Test the webhook (push code)
+
+1. Make a small change in your local repo (e.g., update README) and push:
+
+sh
+git add README.md
+git commit -m "test webhook trigger"
+git push origin main
+
+
+2. In GitHub repo → *Settings → Webhooks* → click the webhook you created → Click *Recent Deliveries* to see payloads and responses. Take a screenshot showing delivery status 200.
+
+3. Jenkins should receive webhook and auto-trigger a build.
+
+   * Open Jenkins → *webapp-pipeline* → you should see a new build started automatically.
+   * Click the build number → *Console Output* → capture screenshot showing the run triggered by webhook.
+
+---
+
+## Note about local Jenkins + webhook
+
+* If Jenkins is behind NAT/firewall, use ngrok or host Jenkins on a public VM. Document the ngrok URL in screenshots for proof.
+
+---
+
+# Q4 — Create an EC2 Instance with Ubuntu and Deploy an Application (25 marks)
+
+Goal: Launch EC2 Ubuntu, install Docker, clone repo, write Dockerfile, build image, run container, show deployment via public IP.
+
+## Step A — Launch EC2 instance (AWS Console)
+
+1. Open AWS console → *EC2* service.
+2. *Instances → Launch Instances*:
+
+   * Name: webapp-ubuntu
+   * AMI: *Ubuntu Server 22.04 LTS* (or 20.04)
+   * Instance Type: t2.micro (free tier) or t3.small
+   * Key Pair: *Create new key pair* or use existing (download .pem).
+   * Network & Subnet: default ok.
+   * Storage: default 8–20GB.
+3. *Security Group*:
+
+   * Add inbound rules:
+
+     * SSH: TCP 22, Source: your IP (recommended) or 0.0.0.0/0 (less secure)
+     * HTTP: TCP 80, 0.0.0.0/0
+     * If your app runs on port 8080: TCP 8080, 0.0.0.0/0
+4. Launch instance and note the *Public IPv4*.
+
+---
+
+## Step B — SSH into the EC2 instance
+
+From your terminal (on Mac/Linux):
+
+sh
+chmod 400 yourkey.pem
+ssh -i yourkey.pem ubuntu@<EC2_PUBLIC_IP>
+
+
+---
+
+## Step C — Install Docker and other tools on Ubuntu
+
+Run the following commands on EC2:
+
+sh
+# update
+sudo apt update && sudo apt upgrade -y
+
+# install prerequisites
+sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release git
+
+# add Docker repo & install
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+# add ubuntu user to docker group (optional)
+sudo usermod -aG docker $USER
+# activate group (you may need to logout/login); for immediate session:
+newgrp docker
+
+# install docker-compose if needed
+sudo apt install -y docker-compose
+
+
+Confirm Docker:
+
+sh
+docker --version
+docker run --rm hello-world
+
+
+---
+
+## Step D — Clone your application from GitHub
+
+sh
+git clone https://github.com/yourusername/yourrepo.git
+cd yourrepo
+
+
+---
+
+## Step E — Create a Dockerfile (example for a simple Node or Java app)
+
+### Example: Node.js web app Dockerfile
+
+dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]
+
+
+Build & run:
+
+sh
+docker build -t my-node-app:latest .
+docker run -d -p 80:3000 --name mynodeapp my-node-app:latest
+# then open http://<EC2_PUBLIC_IP> in browser
+
+
+### Example: Java Spring Boot Jar Dockerfile
+
+dockerfile
+FROM eclipse-temurin:17-jdk-alpine
+ARG JAR_FILE=target/*.jar
+COPY ${JAR_FILE} app.jar
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","/app.jar"]
+
+
+Build:
+
+sh
+mvn -B package
+docker build -t my-spring-app:latest .
+docker run -d -p 8080:8080 --name myapp my-spring-app:latest
+# then open http://<EC2_PUBLIC_IP>:8080/
+
+
+### Example: Deploy WAR on Tomcat via Docker
+
+dockerfile
+FROM tomcat:9.0
+COPY target/my-webapp.war /usr/local/tomcat/webapps/
+EXPOSE 8080
+
+
+Build & run:
+
+sh
+docker build -t my-tomcat-app:latest .
+docker run -d -p 8080:8080 --name tomcatapp my-tomcat-app:latest
+# open http://<EC2_PUBLIC_IP>:8080/my-webapp/
+
+
+---
+
+## Step F — Build and run the Docker image
+
+Commands (generic):
+
+sh
+docker build -t my-app:latest .
+docker run -d --name my-app -p 80:80 my-app:latest
+# or map host port 8080:
+docker run -d --name my-app -p 8080:8080 my-app:latest
+
+
+Check logs:
+
+sh
+docker ps
+docker logs -f my-app
+
+
+Open in browser: http://<EC2_PUBLIC_IP>/ (or :8080 if mapped).
+
+*Take screenshots* of:
+
+* EC2 instance details (instance id, public IP)
+* SSH terminal showing docker build and run
+* Browser open to http://<EC2_PUBLIC_IP>/ showing the app
+* docker ps output
+
+---
+
+# Deliverables / Expected Output Checklist (what to submit/screenshot)
+
+For each question include these artifacts:
+
+*Q1 (Jenkins Pipeline)*
+
+* Jenkinsfile (text file) — include with submission.
+* Screenshot: Jenkins job configuration (pipeline from SCM) and Console Output of successful build.
+* Screenshot: Tomcat Manager showing deployed app OR browser showing app URL (http://tomcat-host:8080/myapp/).
+* Screenshot: Pipeline View in Jenkins.
+
+*Q2 (UML)*
+
+* Exported Class Diagram image (PNG/PDF) from StarUML showing classes, attributes, methods, relationships, multiplicity.
+
+*Q3 (Webhooks)*
+
+* Screenshot: GitHub webhook configuration (payload URL and recent deliveries).
+* Screenshot: Jenkins job build history showing auto-triggered build.
+* Jenkins Console output showing build started by webhook.
+
+*Q4 (EC2 + Docker)*
+
+* Screenshot: EC2 instance details (Instance ID, Public IP).
+* Terminal screenshot: docker build / docker run output on EC2.
+* Browser screenshot: public IP showing the running application.
+* Optional: docker ps output.
+
+---
+
+# Quick Troubleshooting tips
+
+* *Jenkins cannot reach GitHub webhook*: If Jenkins is local, use ngrok to create a public https tunnel and use the ngrok URL as webhook.
+* *Tomcat manager deployment returns 401*: ensure manager-script role included in tomcat-users.xml.
+* **Jenkins pipeline fails on mvn**: install Maven or use a Docker agent with Maven installed (or run in Jenkins agent container).
+* *EC2 cannot serve web page*: verify Security Group inbound rule for port 80/8080 and ufw or iptables on instance are not blocking.
+* *Docker port conflict*: ensure host port is free or choose another port.
+
+---
+
+If you want, I can:
+
+* Generate a ready-to-copy Jenkinsfile tailored to your repo (tell me build tool and artifact name).
+* Produce a StarUML-ready XML snippet or a prepared PNG of the class diagram (I can write the exact diagram content).
+* Provide a ready-to-run cloud-init script to bootstrap the EC2 instance (installs Docker, clones repo, runs container).
+
+Which of those would you like me to produce right now?
