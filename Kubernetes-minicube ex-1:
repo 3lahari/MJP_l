@@ -1,0 +1,24 @@
+Kubernetes-minicube ex-1:
+docker login
+minikube start --vm-driver=virtualbox
+minikube version
+minikube status
+
+kubectl create deployment myngnix --image=nginxkubectl set image deployment/myngnix nginx=nginx:latest
+*Nginx (pronounced "engine-x") is a web server software that helps deliver and manage websites on the internet. 
+It can handle tasks like serving web pages, processing HTTP requests, and load balancing, making it a crucial component in hosting and delivering web content efficiently.
+
+kubectl get deploymentkubectl get pods
+kubectl describe pods
+
+kubectl describe pod mynginx-6b78685d4d-hrc9h   =<id>
+
+kubectl describe pod mynginx-6b78685d4d-hrc9h
+kubectl expose deployment myngnix --type=NodePort --port=80 --target-port=80 --name=myngni
+
+kubectl scale deployment myngnix --replicas=4kubectl get service myngnix (Check the NodePort assigned
+)
+
+kubectl port-forward service/myngnix 30088:80
+
+kubectl delete deployment myngnix1
