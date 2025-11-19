@@ -1,0 +1,12 @@
+ngrok? 
+cd C:\Users\<yourname>\Downloads
+ngrok.exe http 9090
+or .\ngrok.exe http 9090
+
+⭐ You should now see something like:
+Forwarding    https://abcd1234.ngrok-free.app -> http://localhost:9090
+
+This is your webhook URL:
+https://abcd1234.ngrok-free.app/github-webhook/
+
+aste this into GitHub → Repo → Settings → Webhooks.
